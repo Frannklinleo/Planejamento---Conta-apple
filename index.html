@@ -1,18 +1,252 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Ordens de Serviço — Gestão da Manutenção Industrial</title>
-  <meta name="theme-color" content="#ea580c" />
-  <link rel="manifest" href="%BASE_URL%manifest.json" />
-  <link rel="apple-touch-icon" href="%BASE_URL%icons/icon-192.png" />
-  <link rel="icon" href="%BASE_URL%icons/icon-192.png" type="image/png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Ordens de Serviço — Gestão da Manutenção Industrial</title>
+<meta name="theme-color" content="#ea580c" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="icon" href="icons/icon-192.png" type="image/png" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: #f5f5f5; }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+  .font-body { font-family: 'Inter', sans-serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .os-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .os-scroll::-webkit-scrollbar-track { background: transparent; }
+  .os-scroll::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 9999px; }
+  .os-scroll::-webkit-scrollbar-thumb:hover { background: #a3a3a3; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-fadeIn { animation: fadeIn 0.35s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .animate-fadeIn { animation: none !important; } }
+  #boot-fallback { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Inter', sans-serif; color: #a3a3a3; font-size: 13px; }
+</style>
 </head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
+<body class="font-body">
+<div id="root"><div id="boot-fallback">Carregando módulo…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef } = React;
+
+/* ---------------------------------------------------------------------
+   Ordens de Serviço — versão "sem build".
+   Tudo roda direto no navegador: React, Tailwind e a leitura de Excel
+   (biblioteca XLSX) são carregados via CDN. Não precisa de npm, Vite
+   nem GitHub Actions — é só subir estes arquivos e o GitHub Pages serve.
+   --------------------------------------------------------------------- */
+
+/* ------------------------------ DASHBOARD (placeholder — Etapa 6) ------------------------------ */
+function DashboardPage() {
+  return (
+    <div className="h-full min-h-0 flex items-center justify-center animate-fadeIn">
+      <div className="text-center max-w-sm">
+        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 font-display font-semibold">D</div>
+        <h2 className="font-display text-sm font-semibold text-neutral-800 mb-1">Dashboard</h2>
+        <p className="text-xs text-neutral-500">
+          Cards, filtros, gráficos e tabela chegam aqui mais adiante — combinamos priorizar o Planejamento primeiro.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ PLANEJAMENTO (placeholder — Etapa 4/5/6) ------------------------------ */
+function PlanejamentoPage() {
+  return (
+    <div className="h-full min-h-0 flex items-center justify-center animate-fadeIn">
+      <div className="text-center max-w-sm">
+        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 font-display font-semibold">P</div>
+        <h2 className="font-display text-sm font-semibold text-neutral-800 mb-1">Planejamento</h2>
+        <p className="text-xs text-neutral-500">
+          A lista de pendentes, o calendário e o arrastar-e-soltar chegam nas próximas etapas.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ IMPORTAR EXCEL (funcionando — Etapa 2) ------------------------------ */
+function ImportacaoPage() {
+  const [fileName, setFileName] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [columns, setColumns] = useState([]);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef(null);
+
+  function processFile(file) {
+    if (!file) return;
+    setError(null);
+    setLoading(true);
+    setFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+        if (!json.length) {
+          setError("A planilha foi lida, mas não encontrei nenhuma linha de dados. Confira se a primeira aba tem um cabeçalho e pelo menos uma linha.");
+          setRows([]);
+          setColumns([]);
+        } else {
+          setColumns(Object.keys(json[0]));
+          setRows(json);
+        }
+      } catch (err) {
+        setError("Não consegui ler esse arquivo. Confira se é um .xlsx ou .xls válido.");
+        setRows([]);
+        setColumns([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.onerror = () => {
+      setError("Houve um problema ao abrir o arquivo.");
+      setLoading(false);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function handleInputChange(e) {
+    processFile(e.target.files && e.target.files[0]);
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    processFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+  }
+
+  return (
+    <div className="h-full min-h-0 flex flex-col gap-3 animate-fadeIn">
+      <div>
+        <h2 className="font-display text-sm font-semibold text-neutral-800">Importar Excel</h2>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          Leitura do arquivo, só para conferirmos os dados. Guardar e usar no Planejamento vem na próxima etapa.
+        </p>
+      </div>
+
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current && inputRef.current.click()}
+        className="shrink-0 bg-white border-2 border-dashed border-neutral-300 rounded-lg py-10 px-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors"
+      >
+        <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center font-display font-semibold">XL</div>
+        <p className="text-sm text-neutral-700 font-medium">Toque para escolher o arquivo</p>
+        <p className="text-xs text-neutral-400">.xlsx ou .xls</p>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={handleInputChange} className="hidden" />
+      </div>
+
+      {loading && <p className="text-xs text-neutral-500">Lendo {fileName}...</p>}
+
+      {error && (
+        <div className="shrink-0 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">{error}</div>
+      )}
+
+      {!!rows.length && (
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-neutral-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-neutral-200">
+            <h3 className="font-display text-xs font-semibold text-neutral-900">Prévia — {fileName}</h3>
+            <span className="text-xs text-neutral-500 font-mono">{rows.length} linhas lidas</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto os-scroll">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="text-left text-neutral-500 uppercase tracking-wider border-b border-neutral-200">
+                  {columns.map((c) => <th key={c} className="px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 50).map((row, i) => (
+                  <tr key={i} className="border-t border-neutral-100 hover:bg-neutral-50">
+                    {columns.map((c) => <td key={c} className="px-3 py-1.5 text-neutral-700 whitespace-nowrap">{String(row[c])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > 50 && (
+            <div className="shrink-0 px-3 py-1.5 text-xs text-neutral-400 border-t border-neutral-100">
+              Mostrando as primeiras 50 de {rows.length} linhas.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ CASCA (menu + abas) ------------------------------ */
+function App() {
+  const [activeTab, setActiveTab] = useState("importar");
+  const tabs = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "planejamento", label: "Planejamento" },
+    { key: "importar", label: "Importar" },
+  ];
+
+  return (
+    <div className="h-screen w-full flex bg-neutral-100 text-neutral-900 font-body overflow-hidden">
+      <aside className="hidden md:flex flex-col items-center w-16 shrink-0 border-r border-neutral-200 bg-white py-4 gap-1">
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center font-display font-bold text-sm text-neutral-900 mb-4">M</div>
+        <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-orange-50 text-orange-600 text-xs font-semibold" title="Ordens de Serviço">OS</div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-2.5 border-b border-neutral-200 bg-white">
+          <div>
+            <h1 className="font-display text-base font-semibold text-neutral-900 leading-tight">Ordens de Serviço</h1>
+            <p className="text-xs text-neutral-500 leading-tight">Gestão da Manutenção Industrial</p>
+          </div>
+
+          <nav className="flex items-center gap-1 bg-neutral-100 border border-neutral-200 rounded-full p-1 flex-wrap">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  activeTab === t.key ? "bg-orange-600 text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        <main className="flex-1 min-h-0 overflow-y-auto os-scroll px-4 md:px-5 py-3">
+          {activeTab === "dashboard" && <DashboardPage />}
+          {activeTab === "planejamento" && <PlanejamentoPage />}
+          {activeTab === "importar" && <ImportacaoPage />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("service-worker.js").catch(function () {});
+    });
+  }
+</script>
 </body>
 </html>
