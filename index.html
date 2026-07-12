@@ -99,6 +99,7 @@ function normalizarLinhas(linhasBrutas) {
     planejador: (mapa.planejador && linha[mapa.planejador]) || "—",
     dataVencimento: (mapa.dataVencimento && paraISO(linha[mapa.dataVencimento])) || hojeISO(),
     status: (mapa.status && linha[mapa.status]) || "Aberta",
+    diaAgendado: null,
   }));
 }
 
@@ -113,12 +114,12 @@ function seedOrdens() {
     return d.toISOString().slice(0, 10);
   };
   return [
-    { id: "seed-1", numero: "OS-2026-0470", descricao: "Calibração de sensores de pressão", equipamento: "Caldeira Industrial 01", prioridade: "Alta", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-6), status: "Aberta" },
-    { id: "seed-2", numero: "OS-2026-0477", descricao: "Disjuntor desarmando de forma intermitente", equipamento: "Painel Elétrico Geral", prioridade: "Emergencial", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-3), status: "Atrasada" },
-    { id: "seed-3", numero: "OS-2026-0482", descricao: "Vazamento de óleo no selo mecânico", equipamento: "Compressor de Ar 02", prioridade: "Alta", executor: "Carlos Mendes", planejador: "Ana Ribeiro", dataVencimento: iso(0), status: "Em Andamento" },
-    { id: "seed-4", numero: "OS-2026-0481", descricao: "Ruído anormal no motor de tração", equipamento: "Esteira Transportadora A3", prioridade: "Média", executor: "Juliana Alves", planejador: "Pedro Souza", dataVencimento: iso(3), status: "Aberta" },
-    { id: "seed-5", numero: "OS-2026-0479", descricao: "Manutenção preventiva trimestral", equipamento: "Prensa Hidráulica 01", prioridade: "Baixa", executor: "Marcos Lima", planejador: "Ana Ribeiro", dataVencimento: iso(9), status: "Aberta" },
-    { id: "seed-6", numero: "OS-2026-0468", descricao: "Substituição de rolamento do eixo principal", equipamento: "Linha de Envase 03", prioridade: "Alta", executor: "Marcos Lima", planejador: "Pedro Souza", dataVencimento: iso(22), status: "Aberta" },
+    { id: "seed-1", numero: "OS-2026-0470", descricao: "Calibração de sensores de pressão", equipamento: "Caldeira Industrial 01", prioridade: "Alta", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-6), status: "Aberta", diaAgendado: null },
+    { id: "seed-2", numero: "OS-2026-0477", descricao: "Disjuntor desarmando de forma intermitente", equipamento: "Painel Elétrico Geral", prioridade: "Emergencial", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-3), status: "Atrasada", diaAgendado: null },
+    { id: "seed-3", numero: "OS-2026-0482", descricao: "Vazamento de óleo no selo mecânico", equipamento: "Compressor de Ar 02", prioridade: "Alta", executor: "Carlos Mendes", planejador: "Ana Ribeiro", dataVencimento: iso(0), status: "Em Andamento", diaAgendado: null },
+    { id: "seed-4", numero: "OS-2026-0481", descricao: "Ruído anormal no motor de tração", equipamento: "Esteira Transportadora A3", prioridade: "Média", executor: "Juliana Alves", planejador: "Pedro Souza", dataVencimento: iso(3), status: "Aberta", diaAgendado: null },
+    { id: "seed-5", numero: "OS-2026-0479", descricao: "Manutenção preventiva trimestral", equipamento: "Prensa Hidráulica 01", prioridade: "Baixa", executor: "Marcos Lima", planejador: "Ana Ribeiro", dataVencimento: iso(9), status: "Aberta", diaAgendado: null },
+    { id: "seed-6", numero: "OS-2026-0468", descricao: "Substituição de rolamento do eixo principal", equipamento: "Linha de Envase 03", prioridade: "Alta", executor: "Marcos Lima", planejador: "Pedro Souza", dataVencimento: iso(22), status: "Aberta", diaAgendado: null },
   ];
 }
 
@@ -150,7 +151,11 @@ function OrdensProvider({ children }) {
     return normalizadas.length;
   }
 
-  return <OrdensContext.Provider value={{ ordens, salvarOrdensImportadas, ultimaImportacao }}>{children}</OrdensContext.Provider>;
+  function agendarOrdem(ordemId, diaISO) {
+    setOrdens((prev) => prev.map((o) => (o.id === ordemId ? { ...o, diaAgendado: diaISO } : o)));
+  }
+
+  return <OrdensContext.Provider value={{ ordens, salvarOrdensImportadas, agendarOrdem, ultimaImportacao }}>{children}</OrdensContext.Provider>;
 }
 
 /* =========================================================================
@@ -328,18 +333,29 @@ function ImportacaoPage({ onIrParaPlanejamento }) {
 }
 
 /* =========================================================================
-   PLANEJAMENTO — lista de pendentes + calendário da semana (Etapa 4)
+   PLANEJAMENTO — lista de pendentes + calendário da semana (Etapa 5)
+   Duas formas de mover uma ordem, pra funcionar em qualquer aparelho:
+   - Mouse: arrastar (draggable / onDrag*)
+   - Toque: selecionar a ordem e depois tocar no destino
    ========================================================================= */
 function rotuloPrazo(dias) {
   if (dias < 0) return { texto: `Atrasada há ${Math.abs(dias)} dia${Math.abs(dias) > 1 ? "s" : ""}`, cor: "text-red-600" };
   if (dias === 0) return { texto: "Vence hoje", cor: "text-orange-600" };
   return { texto: `Em ${dias} dia${dias > 1 ? "s" : ""}`, cor: "text-neutral-500" };
 }
-function PendenteItem({ ordem }) {
+
+function PendenteItem({ ordem, selecionado, onDragStart, onTap }) {
   const dias = diffDias(ordem.dataVencimento);
   const prazo = rotuloPrazo(dias);
   return (
-    <div className="bg-white border border-neutral-200 rounded-lg p-2.5 hover:border-orange-300 hover:shadow-sm transition-all cursor-grab">
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ordem.id)}
+      onClick={(e) => { e.stopPropagation(); onTap(ordem.id); }}
+      className={`bg-white border rounded-lg p-2.5 hover:border-orange-300 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+        selecionado ? "border-orange-400 ring-2 ring-orange-300" : "border-neutral-200"
+      }`}
+    >
       <div className="flex items-center justify-between mb-1 gap-2">
         <span className="font-mono text-xs text-orange-600 truncate">{ordem.numero}</span>
         <PriorityBadge priority={ordem.prioridade} />
@@ -356,7 +372,30 @@ function PendenteItem({ ordem }) {
     </div>
   );
 }
-function CalendarioSemana() {
+
+function CardAgendado({ ordem, selecionado, onDragStart, onTap }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ordem.id)}
+      onClick={(e) => { e.stopPropagation(); onTap(ordem.id); }}
+      className={`bg-white border rounded-md p-2 cursor-grab active:cursor-grabbing hover:border-orange-300 hover:shadow-sm transition-all ${
+        selecionado ? "border-orange-400 ring-2 ring-orange-300" : "border-neutral-200"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1 gap-1">
+        <span className="font-mono text-xs text-orange-600 truncate">{ordem.numero}</span>
+      </div>
+      <p className="text-xs text-neutral-800 font-medium leading-snug mb-1 truncate">{ordem.equipamento}</p>
+      <div className="flex items-center justify-between gap-1">
+        <PriorityBadge priority={ordem.prioridade} />
+        <Avatar name={ordem.executor} size={16} />
+      </div>
+    </div>
+  );
+}
+
+function CalendarioSemana({ ordens, selecionadoId, dragOverAlvo, onDragStart, onDragOver, onDrop, onTapAlvo, onTapCard }) {
   const hoje = new Date();
   const diaSemanaHoje = hoje.getDay();
   const segunda = new Date(hoje);
@@ -375,16 +414,33 @@ function CalendarioSemana() {
       {dias.map((d, i) => {
         const iso = d.toISOString().slice(0, 10);
         const isHoje = iso === hojeStr;
+        const emDrag = dragOverAlvo === iso;
+        const cardsDoDia = ordens.filter((o) => o.diaAgendado === iso);
         return (
-          <div key={i} className={`flex flex-col w-[150px] shrink-0 rounded-lg border p-1.5 ${isHoje ? "border-orange-300 bg-orange-50" : "border-neutral-200 bg-white"}`}>
+          <div
+            key={i}
+            onDragOver={(e) => onDragOver(e, iso)}
+            onDrop={(e) => onDrop(e, iso)}
+            onClick={() => onTapAlvo(iso)}
+            className={`flex flex-col w-[150px] shrink-0 rounded-lg border p-1.5 transition-colors ${
+              emDrag ? "border-orange-400 bg-orange-50" : isHoje ? "border-orange-300 bg-orange-50" : "border-neutral-200 bg-white"
+            } ${selecionadoId ? "cursor-pointer" : ""}`}
+          >
             <div className="shrink-0 px-1 pb-1.5 mb-1 border-b border-neutral-200">
               <p className={`text-xs font-medium uppercase tracking-wide ${isHoje ? "text-orange-600" : "text-neutral-400"}`}>{nomesDias[d.getDay()]}</p>
               <p className={`font-mono text-xs ${isHoje ? "text-orange-600 font-semibold" : "text-neutral-600"}`}>
                 {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
               </p>
             </div>
-            <div className="flex-1 flex items-center justify-center" style={{ minHeight: "300px" }}>
-              <p className="text-xs text-neutral-300 text-center px-2">Arraste uma ordem aqui (próxima etapa)</p>
+            <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto os-scroll" style={{ minHeight: "300px" }}>
+              {cardsDoDia.length === 0 && (
+                <p className="text-xs text-neutral-300 text-center px-2 py-6">
+                  {selecionadoId ? "Toque aqui pra mover" : "Arraste uma ordem aqui"}
+                </p>
+              )}
+              {cardsDoDia.map((o) => (
+                <CardAgendado key={o.id} ordem={o} selecionado={o.id === selecionadoId} onDragStart={onDragStart} onTap={onTapCard} />
+              ))}
             </div>
           </div>
         );
@@ -392,30 +448,79 @@ function CalendarioSemana() {
     </div>
   );
 }
+
 function PlanejamentoPage() {
-  const { ordens } = useOrdens();
-  const pendentes = ordens.filter((o) => diffDias(o.dataVencimento) <= 30).sort((a, b) => diffDias(a.dataVencimento) - diffDias(b.dataVencimento));
+  const { ordens, agendarOrdem } = useOrdens();
+  const [dragOverAlvo, setDragOverAlvo] = useState(null);
+  const [selecionadoId, setSelecionadoId] = useState(null);
+
+  const pendentes = ordens
+    .filter((o) => !o.diaAgendado && diffDias(o.dataVencimento) <= 30)
+    .sort((a, b) => diffDias(a.dataVencimento) - diffDias(b.dataVencimento));
+
+  function handleDragStart(e, ordemId) {
+    e.dataTransfer.setData("text/plain", ordemId);
+    e.dataTransfer.effectAllowed = "move";
+    setSelecionadoId(null);
+  }
+  function handleDragOver(e, alvo) {
+    e.preventDefault();
+    if (dragOverAlvo !== alvo) setDragOverAlvo(alvo);
+  }
+  function handleDrop(e, alvo) {
+    e.preventDefault();
+    const ordemId = e.dataTransfer.getData("text/plain");
+    setDragOverAlvo(null);
+    if (ordemId) agendarOrdem(ordemId, alvo === "pendentes" ? null : alvo);
+  }
+  function handleTapCard(ordemId) {
+    setSelecionadoId((atual) => (atual === ordemId ? null : ordemId));
+  }
+  function handleTapAlvo(alvo) {
+    if (!selecionadoId) return;
+    agendarOrdem(selecionadoId, alvo === "pendentes" ? null : alvo);
+    setSelecionadoId(null);
+  }
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-3 animate-fadeIn">
       <div>
         <h2 className="font-display text-sm font-semibold text-neutral-800">Planejamento</h2>
         <p className="text-xs text-neutral-500 mt-0.5">
-          Pendentes ordenadas por prazo (atrasadas primeiro), até 30 dias à frente. Arrastar para o calendário chega na próxima etapa.
+          No computador: arraste os cards. No celular: toque numa ordem pra selecionar (fica com borda laranja), depois toque no dia — ou em "Pendentes" pra devolver.
         </p>
       </div>
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3">
-        <div className="lg:w-72 shrink-0 flex flex-col bg-neutral-50 border border-neutral-200 rounded-lg p-2" style={{ maxHeight: "420px" }}>
+        <div
+          onDragOver={(e) => handleDragOver(e, "pendentes")}
+          onDrop={(e) => handleDrop(e, "pendentes")}
+          onClick={() => handleTapAlvo("pendentes")}
+          className={`lg:w-72 shrink-0 flex flex-col border rounded-lg p-2 transition-colors ${
+            dragOverAlvo === "pendentes" ? "border-orange-400 bg-orange-50" : "border-neutral-200 bg-neutral-50"
+          } ${selecionadoId ? "cursor-pointer" : ""}`}
+          style={{ maxHeight: "420px" }}
+        >
           <div className="shrink-0 flex items-center justify-between px-1 pb-2">
             <h3 className="text-xs font-semibold text-neutral-600 uppercase tracking-wide">Pendentes</h3>
             <span className="text-xs text-neutral-400 font-mono">{pendentes.length}</span>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto os-scroll flex flex-col gap-2 pr-0.5">
             {pendentes.length === 0 && <p className="text-xs text-neutral-400 text-center py-6">Nada pendente nos próximos 30 dias.</p>}
-            {pendentes.map((o) => <PendenteItem key={o.id} ordem={o} />)}
+            {pendentes.map((o) => (
+              <PendenteItem key={o.id} ordem={o} selecionado={o.id === selecionadoId} onDragStart={handleDragStart} onTap={handleTapCard} />
+            ))}
           </div>
         </div>
-        <CalendarioSemana />
+        <CalendarioSemana
+          ordens={ordens}
+          selecionadoId={selecionadoId}
+          dragOverAlvo={dragOverAlvo}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onTapAlvo={handleTapAlvo}
+          onTapCard={handleTapCard}
+        />
       </div>
     </div>
   );
