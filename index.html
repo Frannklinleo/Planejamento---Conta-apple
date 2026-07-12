@@ -36,57 +36,199 @@
 <div id="root"><div id="boot-fallback">Carregando módulo…</div></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useRef } = React;
+const { useState, useRef, useEffect, createContext, useContext } = React;
 
-/* ---------------------------------------------------------------------
-   Ordens de Serviço — versão "sem build".
-   Tudo roda direto no navegador: React, Tailwind e a leitura de Excel
-   (biblioteca XLSX) são carregados via CDN. Não precisa de npm, Vite
-   nem GitHub Actions — é só subir estes arquivos e o GitHub Pages serve.
-   --------------------------------------------------------------------- */
+/* =========================================================================
+   UTILITÁRIOS DE DATA
+   ========================================================================= */
+function hojeISO() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
+}
+function diffDias(dataISO) {
+  const hoje = new Date(hojeISO() + "T00:00:00");
+  const data = new Date(dataISO + "T00:00:00");
+  return Math.round((data - hoje) / 86400000);
+}
 
-/* ------------------------------ DASHBOARD (placeholder — Etapa 6) ------------------------------ */
+/* =========================================================================
+   RECONHECIMENTO AUTOMÁTICO DE COLUNAS DO EXCEL
+   Procura, entre os cabeçalhos da planilha, algo parecido com cada campo
+   que o sistema precisa. Se não encontrar, usa um valor padrão — nada quebra.
+   ========================================================================= */
+const CAMPO_PATTERNS = {
+  numero: ["numero", "número", "num", "nº", "ordem", "os"],
+  descricao: ["descricao", "descrição", "atividade", "titulo", "título", "servico", "serviço"],
+  equipamento: ["equipamento", "ativo", "maquina", "máquina"],
+  prioridade: ["prioridade"],
+  executor: ["executor", "responsavel", "responsável", "mecanico", "mecânico"],
+  planejador: ["planejador"],
+  dataVencimento: ["data", "vencimento", "prazo"],
+  status: ["status", "situacao", "situação"],
+};
+
+function semAcento(s) {
+  return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+function encontrarCampo(chaves, patterns) {
+  for (const chave of chaves) {
+    const k = semAcento(chave);
+    if (patterns.some((p) => k.includes(semAcento(p)))) return chave;
+  }
+  return null;
+}
+function paraISO(valor) {
+  if (!valor) return null;
+  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+  const d = new Date(valor);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return null;
+}
+function normalizarLinhas(linhasBrutas) {
+  if (!linhasBrutas.length) return [];
+  const chaves = Object.keys(linhasBrutas[0]);
+  const mapa = {};
+  for (const campo in CAMPO_PATTERNS) mapa[campo] = encontrarCampo(chaves, CAMPO_PATTERNS[campo]);
+  return linhasBrutas.map((linha, i) => ({
+    id: `import-${Date.now()}-${i}`,
+    numero: (mapa.numero && linha[mapa.numero]) || `OS-${1000 + i}`,
+    descricao: (mapa.descricao && linha[mapa.descricao]) || "Sem descrição",
+    equipamento: (mapa.equipamento && linha[mapa.equipamento]) || "—",
+    prioridade: (mapa.prioridade && linha[mapa.prioridade]) || "Média",
+    executor: (mapa.executor && linha[mapa.executor]) || "Não atribuído",
+    planejador: (mapa.planejador && linha[mapa.planejador]) || "—",
+    dataVencimento: (mapa.dataVencimento && paraISO(linha[mapa.dataVencimento])) || hojeISO(),
+    status: (mapa.status && linha[mapa.status]) || "Aberta",
+    diaAgendado: null,
+  }));
+}
+
+/* =========================================================================
+   DADOS DE EXEMPLO — aparecem até você importar uma planilha real
+   ========================================================================= */
+function seedOrdens() {
+  const hoje = new Date();
+  const iso = (offset) => {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  return [
+    { id: "seed-1", numero: "OS-2026-0470", descricao: "Calibração de sensores de pressão", equipamento: "Caldeira Industrial 01", prioridade: "Alta", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-6), status: "Aberta", diaAgendado: null },
+    { id: "seed-2", numero: "OS-2026-0477", descricao: "Disjuntor desarmando de forma intermitente", equipamento: "Painel Elétrico Geral", prioridade: "Emergencial", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataVencimento: iso(-3), status: "Atrasada", diaAgendado: null },
+    { id: "seed-3", numero: "OS-2026-0482", descricao: "Vazamento de óleo no selo mecânico", equipamento: "Compressor de Ar 02", prioridade: "Alta", executor: "Carlos Mendes", planejador: "Ana Ribeiro", dataVencimento: iso(0), status: "Em Andamento", diaAgendado: null },
+    { id: "seed-4", numero: "OS-2026-0481", descricao: "Ruído anormal no motor de tração", equipamento: "Esteira Transportadora A3", prioridade: "Média", executor: "Juliana Alves", planejador: "Pedro Souza", dataVencimento: iso(3), status: "Aberta", diaAgendado: null },
+    { id: "seed-5", numero: "OS-2026-0479", descricao: "Manutenção preventiva trimestral", equipamento: "Prensa Hidráulica 01", prioridade: "Baixa", executor: "Marcos Lima", planejador: "Ana Ribeiro", dataVencimento: iso(9), status: "Aberta", diaAgendado: null },
+    { id: "seed-6", numero: "OS-2026-0468", descricao: "Substituição de rolamento do eixo principal", equipamento: "Linha de Envase 03", prioridade: "Alta", executor: "Marcos Lima", planejador: "Pedro Souza", dataVencimento: iso(22), status: "Aberta", diaAgendado: null },
+  ];
+}
+
+/* =========================================================================
+   CONTEXTO GLOBAL — o "cofre" de dados que qualquer aba pode ler
+   ========================================================================= */
+const OrdensContext = createContext(null);
+function useOrdens() {
+  return useContext(OrdensContext);
+}
+function OrdensProvider({ children }) {
+  const [ordens, setOrdens] = useState(() => {
+    try {
+      const salvo = localStorage.getItem("os-ordens");
+      if (salvo) return JSON.parse(salvo);
+    } catch (e) {}
+    return seedOrdens();
+  });
+  const [ultimaImportacao, setUltimaImportacao] = useState(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("os-ordens", JSON.stringify(ordens)); } catch (e) {}
+  }, [ordens]);
+
+  function salvarOrdensImportadas(linhasBrutas) {
+    const normalizadas = normalizarLinhas(linhasBrutas);
+    setOrdens(normalizadas);
+    setUltimaImportacao({ quando: new Date().toLocaleString("pt-BR"), total: normalizadas.length });
+    return normalizadas.length;
+  }
+
+  function agendarOrdem(ordemId, diaISO) {
+    setOrdens((prev) => prev.map((o) => (o.id === ordemId ? { ...o, diaAgendado: diaISO } : o)));
+  }
+
+  return <OrdensContext.Provider value={{ ordens, salvarOrdensImportadas, agendarOrdem, ultimaImportacao }}>{children}</OrdensContext.Provider>;
+}
+
+/* =========================================================================
+   PRIMITIVOS VISUAIS
+   ========================================================================= */
+const statusStyles = {
+  "Aberta": "bg-sky-50 text-sky-700 border-sky-200",
+  "Em Andamento": "bg-amber-50 text-amber-700 border-amber-200",
+  "Concluída": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Atrasada": "bg-red-50 text-red-700 border-red-200",
+};
+function StatusBadge({ status }) {
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${statusStyles[status] || "bg-neutral-100 text-neutral-600 border-neutral-200"}`}>{status}</span>;
+}
+const priorityStyles = {
+  "Baixa": "bg-neutral-100 text-neutral-600 border-neutral-200",
+  "Média": "bg-amber-50 text-amber-700 border-amber-200",
+  "Alta": "bg-orange-50 text-orange-700 border-orange-200",
+  "Emergencial": "bg-red-50 text-red-700 border-red-200",
+};
+function PriorityBadge({ priority }) {
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${priorityStyles[priority] || "bg-neutral-100 text-neutral-600 border-neutral-200"}`}>{priority}</span>;
+}
+const avatarColors = ["#f97316", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+function hashColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return avatarColors[Math.abs(h) % avatarColors.length];
+}
+function Avatar({ name, size = 20 }) {
+  const iniciais = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  return (
+    <div className="rounded-full flex items-center justify-center font-mono font-semibold text-neutral-900 shrink-0" style={{ width: size, height: size, background: hashColor(name), fontSize: size * 0.4 }}>
+      {iniciais}
+    </div>
+  );
+}
+
+/* =========================================================================
+   DASHBOARD (placeholder)
+   ========================================================================= */
 function DashboardPage() {
+  const { ordens } = useOrdens();
   return (
     <div className="h-full min-h-0 flex items-center justify-center animate-fadeIn">
       <div className="text-center max-w-sm">
         <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 font-display font-semibold">D</div>
         <h2 className="font-display text-sm font-semibold text-neutral-800 mb-1">Dashboard</h2>
         <p className="text-xs text-neutral-500">
-          Cards, filtros, gráficos e tabela chegam aqui mais adiante — combinamos priorizar o Planejamento primeiro.
+          {ordens.length} ordens carregadas. Cards, filtros e gráficos chegam aqui mais adiante — combinamos priorizar o Planejamento primeiro.
         </p>
       </div>
     </div>
   );
 }
 
-/* ------------------------------ PLANEJAMENTO (placeholder — Etapa 4/5/6) ------------------------------ */
-function PlanejamentoPage() {
-  return (
-    <div className="h-full min-h-0 flex items-center justify-center animate-fadeIn">
-      <div className="text-center max-w-sm">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 font-display font-semibold">P</div>
-        <h2 className="font-display text-sm font-semibold text-neutral-800 mb-1">Planejamento</h2>
-        <p className="text-xs text-neutral-500">
-          A lista de pendentes, o calendário e o arrastar-e-soltar chegam nas próximas etapas.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------ IMPORTAR EXCEL (funcionando — Etapa 2) ------------------------------ */
-function ImportacaoPage() {
+/* =========================================================================
+   IMPORTAR EXCEL
+   ========================================================================= */
+function ImportacaoPage({ onIrParaPlanejamento }) {
+  const { salvarOrdensImportadas, ultimaImportacao } = useOrdens();
   const [fileName, setFileName] = useState(null);
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [totalSalvo, setTotalSalvo] = useState(null);
   const inputRef = useRef(null);
 
   function processFile(file) {
     if (!file) return;
     setError(null);
+    setTotalSalvo(null);
     setLoading(true);
     setFileName(file.name);
 
@@ -94,7 +236,7 @@ function ImportacaoPage() {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
@@ -106,6 +248,8 @@ function ImportacaoPage() {
         } else {
           setColumns(Object.keys(json[0]));
           setRows(json);
+          const total = salvarOrdensImportadas(json);
+          setTotalSalvo(total);
         }
       } catch (err) {
         setError("Não consegui ler esse arquivo. Confira se é um .xlsx ou .xls válido.");
@@ -122,20 +266,16 @@ function ImportacaoPage() {
     reader.readAsArrayBuffer(file);
   }
 
-  function handleInputChange(e) {
-    processFile(e.target.files && e.target.files[0]);
-  }
-  function handleDrop(e) {
-    e.preventDefault();
-    processFile(e.dataTransfer.files && e.dataTransfer.files[0]);
-  }
+  function handleInputChange(e) { processFile(e.target.files && e.target.files[0]); }
+  function handleDrop(e) { e.preventDefault(); processFile(e.dataTransfer.files && e.dataTransfer.files[0]); }
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-3 animate-fadeIn">
       <div>
         <h2 className="font-display text-sm font-semibold text-neutral-800">Importar Excel</h2>
         <p className="text-xs text-neutral-500 mt-0.5">
-          Leitura do arquivo, só para conferirmos os dados. Guardar e usar no Planejamento vem na próxima etapa.
+          Ao importar, tento reconhecer sozinho as colunas (número, descrição, equipamento, prioridade,
+          executor, planejador, data, status) e já guardo tudo para o Planejamento usar.
         </p>
       </div>
 
@@ -152,9 +292,15 @@ function ImportacaoPage() {
       </div>
 
       {loading && <p className="text-xs text-neutral-500">Lendo {fileName}...</p>}
+      {error && <div className="shrink-0 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">{error}</div>}
 
-      {error && (
-        <div className="shrink-0 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">{error}</div>
+      {totalSalvo !== null && (
+        <div className="shrink-0 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+          <span>{totalSalvo} ordens salvas e prontas no Planejamento.</span>
+          <button onClick={onIrParaPlanejamento} className="text-emerald-800 font-medium underline underline-offset-2 shrink-0">
+            Ver Planejamento →
+          </button>
+        </div>
       )}
 
       {!!rows.length && (
@@ -179,18 +325,210 @@ function ImportacaoPage() {
               </tbody>
             </table>
           </div>
-          {rows.length > 50 && (
-            <div className="shrink-0 px-3 py-1.5 text-xs text-neutral-400 border-t border-neutral-100">
-              Mostrando as primeiras 50 de {rows.length} linhas.
-            </div>
-          )}
+          {rows.length > 50 && <div className="shrink-0 px-3 py-1.5 text-xs text-neutral-400 border-t border-neutral-100">Mostrando as primeiras 50 de {rows.length} linhas.</div>}
         </div>
       )}
     </div>
   );
 }
 
-/* ------------------------------ CASCA (menu + abas) ------------------------------ */
+/* =========================================================================
+   PLANEJAMENTO — lista de pendentes + calendário da semana (Etapa 5)
+   Duas formas de mover uma ordem, pra funcionar em qualquer aparelho:
+   - Mouse: arrastar (draggable / onDrag*)
+   - Toque: selecionar a ordem e depois tocar no destino
+   ========================================================================= */
+function rotuloPrazo(dias) {
+  if (dias < 0) return { texto: `Atrasada há ${Math.abs(dias)} dia${Math.abs(dias) > 1 ? "s" : ""}`, cor: "text-red-600" };
+  if (dias === 0) return { texto: "Vence hoje", cor: "text-orange-600" };
+  return { texto: `Em ${dias} dia${dias > 1 ? "s" : ""}`, cor: "text-neutral-500" };
+}
+
+function PendenteItem({ ordem, selecionado, onDragStart, onTap }) {
+  const dias = diffDias(ordem.dataVencimento);
+  const prazo = rotuloPrazo(dias);
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ordem.id)}
+      onClick={(e) => { e.stopPropagation(); onTap(ordem.id); }}
+      className={`bg-white border rounded-lg p-2.5 hover:border-orange-300 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+        selecionado ? "border-orange-400 ring-2 ring-orange-300" : "border-neutral-200"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <span className="font-mono text-xs text-orange-600 truncate">{ordem.numero}</span>
+        <PriorityBadge priority={ordem.prioridade} />
+      </div>
+      <p className="text-xs text-neutral-800 font-medium leading-snug mb-1">{ordem.descricao}</p>
+      <p className="text-xs text-neutral-400 mb-1.5 truncate">{ordem.equipamento}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Avatar name={ordem.executor} size={18} />
+          <span className="text-xs text-neutral-500 truncate">{ordem.executor.split(" ")[0]}</span>
+        </div>
+        <span className={`text-xs font-mono shrink-0 ${prazo.cor}`}>{prazo.texto}</span>
+      </div>
+    </div>
+  );
+}
+
+function CardAgendado({ ordem, selecionado, onDragStart, onTap }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ordem.id)}
+      onClick={(e) => { e.stopPropagation(); onTap(ordem.id); }}
+      className={`bg-white border rounded-md p-2 cursor-grab active:cursor-grabbing hover:border-orange-300 hover:shadow-sm transition-all ${
+        selecionado ? "border-orange-400 ring-2 ring-orange-300" : "border-neutral-200"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1 gap-1">
+        <span className="font-mono text-xs text-orange-600 truncate">{ordem.numero}</span>
+      </div>
+      <p className="text-xs text-neutral-800 font-medium leading-snug mb-1 truncate">{ordem.equipamento}</p>
+      <div className="flex items-center justify-between gap-1">
+        <PriorityBadge priority={ordem.prioridade} />
+        <Avatar name={ordem.executor} size={16} />
+      </div>
+    </div>
+  );
+}
+
+function CalendarioSemana({ ordens, selecionadoId, dragOverAlvo, onDragStart, onDragOver, onDrop, onTapAlvo, onTapCard }) {
+  const hoje = new Date();
+  const diaSemanaHoje = hoje.getDay();
+  const segunda = new Date(hoje);
+  segunda.setDate(hoje.getDate() + (diaSemanaHoje === 0 ? -6 : 1 - diaSemanaHoje));
+  const nomesDias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const hojeStr = hoje.toISOString().slice(0, 10);
+
+  const dias = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(segunda);
+    d.setDate(segunda.getDate() + i);
+    return d;
+  });
+
+  return (
+    <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto os-scroll pb-1">
+      {dias.map((d, i) => {
+        const iso = d.toISOString().slice(0, 10);
+        const isHoje = iso === hojeStr;
+        const emDrag = dragOverAlvo === iso;
+        const cardsDoDia = ordens.filter((o) => o.diaAgendado === iso);
+        return (
+          <div
+            key={i}
+            onDragOver={(e) => onDragOver(e, iso)}
+            onDrop={(e) => onDrop(e, iso)}
+            onClick={() => onTapAlvo(iso)}
+            className={`flex flex-col w-[150px] shrink-0 rounded-lg border p-1.5 transition-colors ${
+              emDrag ? "border-orange-400 bg-orange-50" : isHoje ? "border-orange-300 bg-orange-50" : "border-neutral-200 bg-white"
+            } ${selecionadoId ? "cursor-pointer" : ""}`}
+          >
+            <div className="shrink-0 px-1 pb-1.5 mb-1 border-b border-neutral-200">
+              <p className={`text-xs font-medium uppercase tracking-wide ${isHoje ? "text-orange-600" : "text-neutral-400"}`}>{nomesDias[d.getDay()]}</p>
+              <p className={`font-mono text-xs ${isHoje ? "text-orange-600 font-semibold" : "text-neutral-600"}`}>
+                {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
+              </p>
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto os-scroll" style={{ minHeight: "300px" }}>
+              {cardsDoDia.length === 0 && (
+                <p className="text-xs text-neutral-300 text-center px-2 py-6">
+                  {selecionadoId ? "Toque aqui pra mover" : "Arraste uma ordem aqui"}
+                </p>
+              )}
+              {cardsDoDia.map((o) => (
+                <CardAgendado key={o.id} ordem={o} selecionado={o.id === selecionadoId} onDragStart={onDragStart} onTap={onTapCard} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlanejamentoPage() {
+  const { ordens, agendarOrdem } = useOrdens();
+  const [dragOverAlvo, setDragOverAlvo] = useState(null);
+  const [selecionadoId, setSelecionadoId] = useState(null);
+
+  const pendentes = ordens
+    .filter((o) => !o.diaAgendado && diffDias(o.dataVencimento) <= 30)
+    .sort((a, b) => diffDias(a.dataVencimento) - diffDias(b.dataVencimento));
+
+  function handleDragStart(e, ordemId) {
+    e.dataTransfer.setData("text/plain", ordemId);
+    e.dataTransfer.effectAllowed = "move";
+    setSelecionadoId(null);
+  }
+  function handleDragOver(e, alvo) {
+    e.preventDefault();
+    if (dragOverAlvo !== alvo) setDragOverAlvo(alvo);
+  }
+  function handleDrop(e, alvo) {
+    e.preventDefault();
+    const ordemId = e.dataTransfer.getData("text/plain");
+    setDragOverAlvo(null);
+    if (ordemId) agendarOrdem(ordemId, alvo === "pendentes" ? null : alvo);
+  }
+  function handleTapCard(ordemId) {
+    setSelecionadoId((atual) => (atual === ordemId ? null : ordemId));
+  }
+  function handleTapAlvo(alvo) {
+    if (!selecionadoId) return;
+    agendarOrdem(selecionadoId, alvo === "pendentes" ? null : alvo);
+    setSelecionadoId(null);
+  }
+
+  return (
+    <div className="h-full min-h-0 flex flex-col gap-3 animate-fadeIn">
+      <div>
+        <h2 className="font-display text-sm font-semibold text-neutral-800">Planejamento</h2>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          No computador: arraste os cards. No celular: toque numa ordem pra selecionar (fica com borda laranja), depois toque no dia — ou em "Pendentes" pra devolver.
+        </p>
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3">
+        <div
+          onDragOver={(e) => handleDragOver(e, "pendentes")}
+          onDrop={(e) => handleDrop(e, "pendentes")}
+          onClick={() => handleTapAlvo("pendentes")}
+          className={`lg:w-72 shrink-0 flex flex-col border rounded-lg p-2 transition-colors ${
+            dragOverAlvo === "pendentes" ? "border-orange-400 bg-orange-50" : "border-neutral-200 bg-neutral-50"
+          } ${selecionadoId ? "cursor-pointer" : ""}`}
+          style={{ maxHeight: "420px" }}
+        >
+          <div className="shrink-0 flex items-center justify-between px-1 pb-2">
+            <h3 className="text-xs font-semibold text-neutral-600 uppercase tracking-wide">Pendentes</h3>
+            <span className="text-xs text-neutral-400 font-mono">{pendentes.length}</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto os-scroll flex flex-col gap-2 pr-0.5">
+            {pendentes.length === 0 && <p className="text-xs text-neutral-400 text-center py-6">Nada pendente nos próximos 30 dias.</p>}
+            {pendentes.map((o) => (
+              <PendenteItem key={o.id} ordem={o} selecionado={o.id === selecionadoId} onDragStart={handleDragStart} onTap={handleTapCard} />
+            ))}
+          </div>
+        </div>
+        <CalendarioSemana
+          ordens={ordens}
+          selecionadoId={selecionadoId}
+          dragOverAlvo={dragOverAlvo}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onTapAlvo={handleTapAlvo}
+          onTapCard={handleTapCard}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   CASCA (menu + abas)
+   ========================================================================= */
 function App() {
   const [activeTab, setActiveTab] = useState("importar");
   const tabs = [
@@ -200,41 +538,36 @@ function App() {
   ];
 
   return (
-    <div className="h-screen w-full flex bg-neutral-100 text-neutral-900 font-body overflow-hidden">
-      <aside className="hidden md:flex flex-col items-center w-16 shrink-0 border-r border-neutral-200 bg-white py-4 gap-1">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center font-display font-bold text-sm text-neutral-900 mb-4">M</div>
-        <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-orange-50 text-orange-600 text-xs font-semibold" title="Ordens de Serviço">OS</div>
-      </aside>
+    <OrdensProvider>
+      <div className="h-screen w-full flex bg-neutral-100 text-neutral-900 font-body overflow-hidden">
+        <aside className="hidden md:flex flex-col items-center w-16 shrink-0 border-r border-neutral-200 bg-white py-4 gap-1">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center font-display font-bold text-sm text-neutral-900 mb-4">M</div>
+          <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-orange-50 text-orange-600 text-xs font-semibold" title="Ordens de Serviço">OS</div>
+        </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-2.5 border-b border-neutral-200 bg-white">
-          <div>
-            <h1 className="font-display text-base font-semibold text-neutral-900 leading-tight">Ordens de Serviço</h1>
-            <p className="text-xs text-neutral-500 leading-tight">Gestão da Manutenção Industrial</p>
-          </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-2.5 border-b border-neutral-200 bg-white">
+            <div>
+              <h1 className="font-display text-base font-semibold text-neutral-900 leading-tight">Ordens de Serviço</h1>
+              <p className="text-xs text-neutral-500 leading-tight">Gestão da Manutenção Industrial</p>
+            </div>
+            <nav className="flex items-center gap-1 bg-neutral-100 border border-neutral-200 rounded-full p-1 flex-wrap">
+              {tabs.map((t) => (
+                <button key={t.key} onClick={() => setActiveTab(t.key)} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${activeTab === t.key ? "bg-orange-600 text-neutral-900" : "text-neutral-500 hover:text-neutral-700"}`}>
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+          </header>
 
-          <nav className="flex items-center gap-1 bg-neutral-100 border border-neutral-200 rounded-full p-1 flex-wrap">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  activeTab === t.key ? "bg-orange-600 text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-        </header>
-
-        <main className="flex-1 min-h-0 overflow-y-auto os-scroll px-4 md:px-5 py-3">
-          {activeTab === "dashboard" && <DashboardPage />}
-          {activeTab === "planejamento" && <PlanejamentoPage />}
-          {activeTab === "importar" && <ImportacaoPage />}
-        </main>
+          <main className="flex-1 min-h-0 overflow-y-auto os-scroll px-4 md:px-5 py-3">
+            {activeTab === "dashboard" && <DashboardPage />}
+            {activeTab === "planejamento" && <PlanejamentoPage />}
+            {activeTab === "importar" && <ImportacaoPage onIrParaPlanejamento={() => setActiveTab("planejamento")} />}
+          </main>
+        </div>
       </div>
-    </div>
+    </OrdensProvider>
   );
 }
 
