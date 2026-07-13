@@ -76,8 +76,8 @@ const CAMPO_PATTERNS = {
   descricao: ["descricao", "descrição", "description", "servico", "serviço", "observacao", "observação"],
   equipamento: ["equipamento", "ativo", "maquina", "máquina", "asset"],
   prioridade: ["prioridade", "priority"],
-  executor: ["executor", "responsavel", "responsável", "mecanico", "mecânico", "labor", "technician"],
-  planejador: ["planejador", "planner"],
+  executor: ["trabalho", "labor", "executor", "responsavel", "responsável", "mecanico", "mecânico", "technician"],
+  planejador: ["solicitada por", "solicitado por", "requested by", "requester"],
   dataFechamento: ["close date", "closedate", "data de fechamento", "vencimento", "prazo", "data"],
   status: ["status", "situacao", "situação"],
 };
@@ -136,12 +136,12 @@ function seedOrdens() {
     return d.toISOString().slice(0, 10);
   };
   return [
-    { id: "seed-1", numero: "OS-2026-0470", tipo: "Preventiva", titulo: "Calibração de sensores de pressão", descricao: "", equipamento: "Caldeira Industrial 01", prioridade: "Alta", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataFechamento: iso(-6), status: "Aberta", diaAgendado: null },
-    { id: "seed-2", numero: "OS-2026-0477", tipo: "Corretiva", titulo: "Disjuntor desarmando de forma intermitente", descricao: "", equipamento: "Painel Elétrico Geral", prioridade: "Emergencial", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataFechamento: iso(-3), status: "Atrasada", diaAgendado: null },
-    { id: "seed-3", numero: "OS-2026-0482", tipo: "Corretiva", titulo: "Vazamento de óleo no selo mecânico", descricao: "", equipamento: "Compressor de Ar 02", prioridade: "Alta", executor: "Carlos Mendes", planejador: "Ana Ribeiro", dataFechamento: iso(0), status: "Em Andamento", diaAgendado: null },
-    { id: "seed-4", numero: "OS-2026-0481", tipo: "Corretiva", titulo: "Ruído anormal no motor de tração", descricao: "", equipamento: "Esteira Transportadora A3", prioridade: "Média", executor: "Juliana Alves", planejador: "Pedro Souza", dataFechamento: iso(3), status: "Aberta", diaAgendado: null },
-    { id: "seed-5", numero: "OS-2026-0479", tipo: "Preventiva", titulo: "Manutenção preventiva trimestral", descricao: "", equipamento: "Prensa Hidráulica 01", prioridade: "Baixa", executor: "Marcos Lima", planejador: "Ana Ribeiro", dataFechamento: iso(9), status: "Aberta", diaAgendado: null },
-    { id: "seed-6", numero: "OS-2026-0468", tipo: "Preventiva", titulo: "Substituição de rolamento do eixo principal", descricao: "", equipamento: "Linha de Envase 03", prioridade: "Alta", executor: "Marcos Lima", planejador: "Pedro Souza", dataFechamento: iso(22), status: "Aberta", diaAgendado: null },
+    { id: "seed-1", numero: "OS-2026-0470", tipo: "Preventiva", titulo: "Calibração de sensores de pressão", descricao: "Verificar e calibrar os sensores de pressão da caldeira conforme especificação do fabricante.", equipamento: "Caldeira Industrial 01", prioridade: "Alta", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataFechamento: iso(-6), status: "Aberta", diaAgendado: null },
+    { id: "seed-2", numero: "OS-2026-0477", tipo: "Corretiva", titulo: "Disjuntor desarmando de forma intermitente", descricao: "Investigar causa raiz do desarme intermitente e substituir o disjuntor se necessário.", equipamento: "Painel Elétrico Geral", prioridade: "Emergencial", executor: "Rafael Costa", planejador: "Bruno Teixeira", dataFechamento: iso(-3), status: "Atrasada", diaAgendado: null },
+    { id: "seed-3", numero: "OS-2026-0482", tipo: "Corretiva", titulo: "Vazamento de óleo no selo mecânico", descricao: "Trocar o selo mecânico do compressor e verificar nível de óleo após o reparo.", equipamento: "Compressor de Ar 02", prioridade: "Alta", executor: "Carlos Mendes", planejador: "Ana Ribeiro", dataFechamento: iso(0), status: "Em Andamento", diaAgendado: null },
+    { id: "seed-4", numero: "OS-2026-0481", tipo: "Corretiva", titulo: "Ruído anormal no motor de tração", descricao: "Inspecionar rolamentos e alinhamento do motor de tração da esteira.", equipamento: "Esteira Transportadora A3", prioridade: "Média", executor: "Juliana Alves", planejador: "Pedro Souza", dataFechamento: iso(3), status: "Aberta", diaAgendado: null },
+    { id: "seed-5", numero: "OS-2026-0479", tipo: "Preventiva", titulo: "Manutenção preventiva trimestral", descricao: "Checklist trimestral padrão: lubrificação, aperto de conexões e teste de segurança.", equipamento: "Prensa Hidráulica 01", prioridade: "Baixa", executor: "Marcos Lima", planejador: "Ana Ribeiro", dataFechamento: iso(9), status: "Aberta", diaAgendado: null },
+    { id: "seed-6", numero: "OS-2026-0468", tipo: "Preventiva", titulo: "Substituição de rolamento do eixo principal", descricao: "Substituir rolamento do eixo principal e verificar alinhamento da linha de envase.", equipamento: "Linha de Envase 03", prioridade: "Alta", executor: "Marcos Lima", planejador: "Pedro Souza", dataFechamento: iso(22), status: "Aberta", diaAgendado: null },
   ];
 }
 
@@ -378,7 +378,7 @@ function rotuloPrazo(dias) {
   return { texto: `Em ${dias} dia${dias > 1 ? "s" : ""}`, cor: "text-neutral-500" };
 }
 
-/* Lista densa de pendentes — WO Number / WO Type / Title / Close Date / Labor,
+/* Lista densa de pendentes — WO Number / WO Type / Title / Close Date / Executante,
    ordenada por Close Date (atrasadas sempre primeiro), até 30 dias à frente. */
 function ListaPendentes({ pendentes, destaqueId, onDragStart, onAbrirDetalhe }) {
   return (
@@ -389,7 +389,7 @@ function ListaPendentes({ pendentes, destaqueId, onDragStart, onAbrirDetalhe }) 
           <th className="px-2 py-1.5 font-medium whitespace-nowrap">WO Type</th>
           <th className="px-2 py-1.5 font-medium">Title</th>
           <th className="px-2 py-1.5 font-medium whitespace-nowrap">Close Date</th>
-          <th className="px-2 py-1.5 font-medium whitespace-nowrap">Labor</th>
+          <th className="px-2 py-1.5 font-medium whitespace-nowrap">Executante</th>
         </tr>
       </thead>
       <tbody>
@@ -425,19 +425,20 @@ function CardAgendado({ ordem, destaque, onDragStart, onAbrirDetalhe }) {
       draggable
       onDragStart={(e) => onDragStart(e, ordem.id)}
       onClick={() => onAbrirDetalhe(ordem.id)}
-      className={`bg-white border rounded-md p-2 cursor-pointer hover:border-orange-300 hover:shadow-sm transition-all ${
+      className={`bg-white border rounded-lg p-3 cursor-pointer hover:border-orange-300 hover:shadow-sm transition-all ${
         destaque ? "border-orange-400 ring-2 ring-orange-300" : "border-neutral-200"
       }`}
     >
-      <div className="flex items-center justify-between mb-1 gap-1">
+      <div className="flex items-center justify-between mb-1.5 gap-1">
         <span className="font-mono text-xs text-orange-600 truncate">{ordem.numero}</span>
         <span className="text-xs text-neutral-400 truncate shrink-0">{ordem.tipo}</span>
       </div>
-      <p className="text-xs text-neutral-800 font-medium leading-snug mb-1 truncate">{ordem.titulo}</p>
-      <div className="flex items-center justify-between gap-1">
+      <p className="text-sm text-neutral-800 font-medium leading-snug mb-2">{ordem.titulo}</p>
+      <div className="flex items-center justify-between gap-1 mb-1.5">
+        <PriorityBadge priority={ordem.prioridade} />
         <span className="text-xs font-mono text-neutral-500">{formatarDataCurta(ordem.dataFechamento)}</span>
-        <span className="text-xs text-neutral-500 truncate">{ordem.executor}</span>
       </div>
+      <p className="text-xs text-neutral-500 truncate">{ordem.executor}</p>
     </div>
   );
 }
@@ -457,7 +458,7 @@ function CalendarioSemana({ ordens, destaqueId, dragOverAlvo, onDragStart, onDra
             key={d.iso}
             onDragOver={(e) => onDragOver(e, d.iso)}
             onDrop={(e) => onDrop(e, d.iso)}
-            className={`flex flex-col w-[150px] shrink-0 rounded-lg border p-1.5 transition-colors ${
+            className={`flex flex-col w-[200px] shrink-0 rounded-lg border p-1.5 transition-colors ${
               emDrag ? "border-orange-400 bg-orange-50" : isHoje ? "border-orange-300 bg-orange-50" : "border-neutral-200 bg-white"
             }`}
           >
@@ -465,7 +466,7 @@ function CalendarioSemana({ ordens, destaqueId, dragOverAlvo, onDragStart, onDra
               <p className={`text-xs font-medium uppercase tracking-wide ${isHoje ? "text-orange-600" : "text-neutral-400"}`}>{d.label}</p>
               <p className={`font-mono text-xs ${isHoje ? "text-orange-600 font-semibold" : "text-neutral-600"}`}>{d.dataCurta}</p>
             </div>
-            <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto os-scroll" style={{ minHeight: "300px" }}>
+            <div className="flex-1 flex flex-col gap-2 overflow-y-auto os-scroll" style={{ minHeight: "340px" }}>
               {cardsDoDia.length === 0 && <p className="text-xs text-neutral-300 text-center px-2 py-6">Arraste uma ordem aqui</p>}
               {cardsDoDia.map((o) => (
                 <CardAgendado key={o.id} ordem={o} destaque={o.id === destaqueId} onDragStart={onDragStart} onAbrirDetalhe={onAbrirDetalhe} />
@@ -478,9 +479,85 @@ function CalendarioSemana({ ordens, destaqueId, dragOverAlvo, onDragStart, onDra
   );
 }
 
-/* Sidebar de detalhes — abre do lado direito ao tocar/clicar num card.
+const NOMES_MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const NOMES_DIAS_CURTO = ["D", "S", "T", "Q", "Q", "S", "S"];
+
+function CalendarioMensal({ ordens, destaqueId, dragOverAlvo, onDragStart, onDragOver, onDrop, onAbrirDetalhe, mesReferencia, onMudarMes }) {
+  const ano = mesReferencia.getFullYear();
+  const mes = mesReferencia.getMonth();
+  const primeiroDia = new Date(ano, mes, 1);
+  const inicioGrade = new Date(primeiroDia);
+  inicioGrade.setDate(primeiroDia.getDate() - primeiroDia.getDay());
+  const dias = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(inicioGrade);
+    d.setDate(inicioGrade.getDate() + i);
+    return d;
+  });
+  const hojeStr = hojeISO();
+
+  return (
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
+      <div className="shrink-0 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onMudarMes(-1)} className="w-7 h-7 flex items-center justify-center rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50 transition-colors">‹</button>
+          <span className="text-sm font-medium text-neutral-700 font-display w-36 text-center">{NOMES_MESES[mes]} {ano}</span>
+          <button onClick={() => onMudarMes(1)} className="w-7 h-7 flex items-center justify-center rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50 transition-colors">›</button>
+        </div>
+        <button onClick={() => onMudarMes(0, true)} className="text-xs text-orange-600 hover:text-orange-700 px-2 py-1 rounded-md border border-orange-200 bg-orange-50 transition-colors">Hoje</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 shrink-0">
+        {NOMES_DIAS_CURTO.map((n, i) => (
+          <div key={i} className="text-xs text-neutral-400 text-center uppercase font-medium py-1">{n}</div>
+        ))}
+      </div>
+      <div className="flex-1 min-h-0 grid grid-cols-7 auto-rows-fr gap-1 overflow-y-auto os-scroll">
+        {dias.map((d, i) => {
+          const iso = d.toISOString().slice(0, 10);
+          const foraDoMes = d.getMonth() !== mes;
+          const isHoje = iso === hojeStr;
+          const emDrag = dragOverAlvo === iso;
+          const ordensDoDia = ordens.filter((o) => o.diaAgendado === iso);
+          const visiveis = ordensDoDia.slice(0, 3);
+          const extras = ordensDoDia.length - visiveis.length;
+          return (
+            <div
+              key={i}
+              onDragOver={(e) => onDragOver(e, iso)}
+              onDrop={(e) => onDrop(e, iso)}
+              className={`flex flex-col rounded-md border p-1 transition-colors ${
+                emDrag ? "border-orange-400 bg-orange-50" : isHoje ? "border-orange-300 bg-orange-50" : "border-neutral-200 bg-white"
+              } ${foraDoMes ? "opacity-40" : ""}`}
+              style={{ minHeight: "88px" }}
+            >
+              <span className={`text-xs font-mono mb-1 ${isHoje ? "text-orange-600 font-semibold" : "text-neutral-500"}`}>{d.getDate()}</span>
+              <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-hidden">
+                {visiveis.map((o) => (
+                  <div
+                    key={o.id}
+                    draggable
+                    onDragStart={(e) => onDragStart(e, o.id)}
+                    onClick={() => onAbrirDetalhe(o.id)}
+                    title={o.titulo}
+                    className={`cursor-pointer text-xs px-1.5 py-0.5 rounded truncate border ${
+                      o.id === destaqueId ? "border-orange-400 bg-orange-100" : "border-neutral-200 bg-neutral-50 hover:bg-orange-50"
+                    }`}
+                  >
+                    <span className="font-mono text-orange-600">{o.numero}</span>
+                  </div>
+                ))}
+                {extras > 0 && <span className="text-xs text-neutral-400 px-1.5">+{extras} mais</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Sidebar de detalhes/* Sidebar de detalhes — abre do lado direito ao tocar/clicar num card.
    Permite editar os campos principais, mover para outro dia e excluir. */
-function SidebarDetalhe({ ordem, onFechar, onEditar, onMover, onExcluir }) {
+function SidebarDetalhe({ ordem, executantes, onFechar, onEditar, onMover, onExcluir }) {
   if (!ordem) return null;
   const dias = semanaAtual();
 
@@ -549,7 +626,19 @@ function SidebarDetalhe({ ordem, onFechar, onEditar, onMover, onExcluir }) {
             </div>
           </div>
 
-          {campoTexto("Labor", ordem.executor, "executor")}
+          <div>
+            <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Executante</label>
+            <select
+              value={ordem.executor}
+              onChange={(e) => onEditar(ordem.id, { executor: e.target.value })}
+              className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
+            >
+              {!executantes.includes(ordem.executor) && ordem.executor && <option value={ordem.executor}>{ordem.executor}</option>}
+              {executantes.map((nome) => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          </div>
           {campoTexto("Planejador", ordem.planejador, "planejador")}
 
           <div>
@@ -595,12 +684,15 @@ function PlanejamentoPage() {
   const { ordens, agendarOrdem, editarOrdem, excluirOrdem } = useOrdens();
   const [dragOverAlvo, setDragOverAlvo] = useState(null);
   const [ordemDetalheId, setOrdemDetalheId] = useState(null);
+  const [visualizacao, setVisualizacao] = useState("semana");
+  const [mesReferencia, setMesReferencia] = useState(() => new Date());
 
   const pendentes = ordens
     .filter((o) => !o.diaAgendado && diffDias(o.dataFechamento) <= 30)
     .sort((a, b) => diffDias(a.dataFechamento) - diffDias(b.dataFechamento));
 
   const ordemDetalhe = ordens.find((o) => o.id === ordemDetalheId) || null;
+  const executantesDisponiveis = Array.from(new Set(ordens.map((o) => o.executor).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   function handleDragStart(e, ordemId) {
     e.dataTransfer.setData("text/plain", ordemId);
@@ -616,15 +708,36 @@ function PlanejamentoPage() {
     setDragOverAlvo(null);
     if (ordemId) agendarOrdem(ordemId, alvo === "pendentes" ? null : alvo);
   }
+  function handleMudarMes(delta, irParaHoje) {
+    if (irParaHoje) { setMesReferencia(new Date()); return; }
+    setMesReferencia((atual) => new Date(atual.getFullYear(), atual.getMonth() + delta, 1));
+  }
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-3 animate-fadeIn">
-      <div>
-        <h2 className="font-display text-sm font-semibold text-neutral-800">Planejamento</h2>
-        <p className="text-xs text-neutral-500 mt-0.5">
-          Pendentes ordenadas por Close Date (atrasadas primeiro), até 30 dias à frente. Toque numa ordem para ver e editar os detalhes. No computador, também dá pra arrastar direto pro calendário.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-sm font-semibold text-neutral-800">Planejamento</h2>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Pendentes ordenadas por Close Date (atrasadas primeiro), até 30 dias à frente. Toque numa ordem para ver e editar os detalhes.
+          </p>
+        </div>
+        <div className="flex items-center bg-white border border-neutral-200 rounded-lg overflow-hidden text-xs shrink-0">
+          <button
+            onClick={() => setVisualizacao("semana")}
+            className={`px-3 py-1.5 font-medium transition-colors ${visualizacao === "semana" ? "bg-orange-600 text-neutral-900" : "text-neutral-500 hover:bg-neutral-50"}`}
+          >
+            Semana
+          </button>
+          <button
+            onClick={() => setVisualizacao("mes")}
+            className={`px-3 py-1.5 font-medium transition-colors ${visualizacao === "mes" ? "bg-orange-600 text-neutral-900" : "text-neutral-500 hover:bg-neutral-50"}`}
+          >
+            Mês
+          </button>
+        </div>
       </div>
+
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3">
         <div
           onDragOver={(e) => handleDragOver(e, "pendentes")}
@@ -646,19 +759,35 @@ function PlanejamentoPage() {
             )}
           </div>
         </div>
-        <CalendarioSemana
-          ordens={ordens}
-          destaqueId={ordemDetalheId}
-          dragOverAlvo={dragOverAlvo}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onAbrirDetalhe={setOrdemDetalheId}
-        />
+
+        {visualizacao === "semana" ? (
+          <CalendarioSemana
+            ordens={ordens}
+            destaqueId={ordemDetalheId}
+            dragOverAlvo={dragOverAlvo}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onAbrirDetalhe={setOrdemDetalheId}
+          />
+        ) : (
+          <CalendarioMensal
+            ordens={ordens}
+            destaqueId={ordemDetalheId}
+            dragOverAlvo={dragOverAlvo}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onAbrirDetalhe={setOrdemDetalheId}
+            mesReferencia={mesReferencia}
+            onMudarMes={handleMudarMes}
+          />
+        )}
       </div>
 
       <SidebarDetalhe
         ordem={ordemDetalhe}
+        executantes={executantesDisponiveis}
         onFechar={() => setOrdemDetalheId(null)}
         onEditar={editarOrdem}
         onMover={agendarOrdem}
