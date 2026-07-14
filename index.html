@@ -569,15 +569,15 @@ function SidebarDetalhe({ ordem, executantes, onFechar, onEditar, onMover, onExc
   if (!ordem) return null;
   const dias = semanaAtual();
 
-  function campoTexto(label, valor, campo) {
+  function campoCompacto(label, valor, campo, tipo) {
     return (
       <div>
-        <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">{label}</label>
+        <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-0.5">{label}</label>
         <input
-          type="text"
+          type={tipo || "text"}
           value={valor}
           onChange={(e) => onEditar(ordem.id, { [campo]: e.target.value })}
-          className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+          className="w-full text-xs border border-neutral-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300"
         />
       </div>
     );
@@ -586,70 +586,69 @@ function SidebarDetalhe({ ordem, executantes, onFechar, onEditar, onMover, onExc
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onFechar} />
-      <div className="relative w-full max-w-sm h-full bg-white border-l border-neutral-200 shadow-xl flex flex-col animate-fadeIn">
+      <div className="relative w-full max-w-md h-full bg-white border-l border-neutral-200 shadow-xl flex flex-col animate-fadeIn">
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-neutral-200">
           <span className="font-mono text-xs text-orange-600">{ordem.numero}</span>
           <button onClick={onFechar} className="text-neutral-400 hover:text-neutral-700 text-xl leading-none px-1">×</button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto os-scroll p-4 flex flex-col gap-4">
-          {campoTexto("Title", ordem.titulo, "titulo")}
-
+        <div className="flex-1 min-h-0 overflow-y-auto os-scroll p-4 flex flex-col gap-3">
           <div>
-            <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Descrição</label>
-            <textarea
-              value={ordem.descricao}
-              onChange={(e) => onEditar(ordem.id, { descricao: e.target.value })}
-              rows={3}
-              placeholder="Detalhes da atividade a ser executada..."
-              className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+            <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-0.5">Title</label>
+            <input
+              type="text"
+              value={ordem.titulo}
+              onChange={(e) => onEditar(ordem.id, { titulo: e.target.value })}
+              className="w-full text-sm font-medium border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
             />
           </div>
 
-          {campoTexto("Equipamento", ordem.equipamento, "equipamento")}
-
-          <div className="grid grid-cols-2 gap-3">
+          {/* Metadados em grade compacta, pra sobrar espaço pra Descrição */}
+          <div className="grid grid-cols-2 gap-2 p-2 bg-neutral-50 border border-neutral-200 rounded-md">
+            {campoCompacto("WO Type", ordem.tipo, "tipo")}
             <div>
-              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">WO Type</label>
-              <input type="text" value={ordem.tipo} onChange={(e) => onEditar(ordem.id, { tipo: e.target.value })} className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300" />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Prioridade</label>
-              <select value={ordem.prioridade} onChange={(e) => onEditar(ordem.id, { prioridade: e.target.value })} className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
+              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-0.5">Prioridade</label>
+              <select value={ordem.prioridade} onChange={(e) => onEditar(ordem.id, { prioridade: e.target.value })} className="w-full text-xs border border-neutral-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
                 <option>Baixa</option><option>Média</option><option>Alta</option><option>Emergencial</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Status</label>
-              <select value={ordem.status} onChange={(e) => onEditar(ordem.id, { status: e.target.value })} className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
+              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-0.5">Status</label>
+              <select value={ordem.status} onChange={(e) => onEditar(ordem.id, { status: e.target.value })} className="w-full text-xs border border-neutral-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
                 <option>Aberta</option><option>Em Andamento</option><option>Concluída</option><option>Atrasada</option>
               </select>
             </div>
+            {campoCompacto("Close Date", ordem.dataFechamento, "dataFechamento", "date")}
             <div>
-              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Close Date</label>
-              <input type="date" value={ordem.dataFechamento} onChange={(e) => onEditar(ordem.id, { dataFechamento: e.target.value })} className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300" />
+              <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-0.5">Executante</label>
+              <select
+                value={ordem.executor}
+                onChange={(e) => onEditar(ordem.id, { executor: e.target.value })}
+                className="w-full text-xs border border-neutral-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
+              >
+                {!executantes.includes(ordem.executor) && ordem.executor && <option value={ordem.executor}>{ordem.executor}</option>}
+                {executantes.map((nome) => (
+                  <option key={nome} value={nome}>{nome}</option>
+                ))}
+              </select>
             </div>
+            {campoCompacto("Planejador", ordem.planejador, "planejador")}
+            <div className="col-span-2">{campoCompacto("Equipamento", ordem.equipamento, "equipamento")}</div>
           </div>
 
-          <div>
-            <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1">Executante</label>
-            <select
-              value={ordem.executor}
-              onChange={(e) => onEditar(ordem.id, { executor: e.target.value })}
-              className="w-full text-sm border border-neutral-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
-            >
-              {!executantes.includes(ordem.executor) && ordem.executor && <option value={ordem.executor}>{ordem.executor}</option>}
-              {executantes.map((nome) => (
-                <option key={nome} value={nome}>{nome}</option>
-              ))}
-            </select>
+          {/* Descrição — campo principal, com mais espaço e fonte menor pra caber mais texto */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            <label className="text-xs text-neutral-400 uppercase tracking-wide block mb-1 shrink-0">Descrição</label>
+            <textarea
+              value={ordem.descricao}
+              onChange={(e) => onEditar(ordem.id, { descricao: e.target.value })}
+              placeholder="Detalhes da atividade a ser executada..."
+              className="w-full flex-1 text-xs leading-relaxed border border-neutral-200 rounded-md px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+              style={{ minHeight: "220px" }}
+            />
           </div>
-          {campoTexto("Planejador", ordem.planejador, "planejador")}
 
-          <div>
+          <div className="shrink-0">
             <p className="text-xs text-neutral-400 uppercase tracking-wide mb-2">Mover para</p>
             <div className="grid grid-cols-4 gap-1.5">
               {dias.map((d) => (
