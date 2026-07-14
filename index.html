@@ -86,9 +86,17 @@ function semAcento(s) {
   return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 function encontrarCampo(chaves, patterns) {
-  for (const chave of chaves) {
-    const k = semAcento(chave);
-    if (patterns.some((p) => k.includes(semAcento(p)))) return chave;
+  const patternsNorm = patterns.map((p) => semAcento(p));
+  const chavesNorm = chaves.map((c) => ({ original: c, norm: semAcento(c) }));
+
+  // 1ª tentativa: nome da coluna idêntico ao padrão (ex.: "Descrição" == "descricao")
+  for (const p of patternsNorm) {
+    const exata = chavesNorm.find((c) => c.norm === p);
+    if (exata) return exata.original;
+  }
+  // 2ª tentativa (reserva): coluna que apenas contém o padrão (ex.: "Data de Fechamento")
+  for (const c of chavesNorm) {
+    if (patternsNorm.some((p) => c.norm.includes(p))) return c.original;
   }
   return null;
 }
